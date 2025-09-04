@@ -13,150 +13,131 @@
   <canvas id="panorama"></canvas>
 
   <script>
-    const canvas = document.getElementById('panorama');
-    const ctx = canvas.getContext('2d');
-    let width = canvas.width = window.innerWidth;
-    let height = canvas.height = window.innerHeight;
+const canvas = document.getElementById('panorama');
+const ctx = canvas.getContext('2d');
 
-    const img = new Image();
-    img.src = 'images/pano.jpg'; // 放你的 iPhone 全景圖
+let img = new Image();
+img.src = "images/pano.jpg";
 
-    // 拖曳與偏移
-    let offsetX = 0;
-    let isDragging = false;
-    let startX = 0;
+let offsetX = 0;
+let scale = 1;
+let startX = 0;
+let isDragging = false;
 
-    // 縮放
-    let scale = 1;
+let lastTouchDist = 0;
+let lastCenter = null;
 
-    // 手機觸控防抖
-    let lastTouchTime = 0;
-    let touchStartX = 0;
-    let initialDistance = 0;
-    let initialScale = scale;
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  draw();
+}
 
-    img.onload = () => draw();
+window.addEventListener('resize', resizeCanvas);
+img.onload = resizeCanvas;
 
-    function draw() {
-      ctx.clearRect(0,0,width,height);
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      const imgWidth = img.width * scale;
-      const imgHeight = img.height * scale;
+  const imgHeight = img.height * scale;
+  const imgWidth = img.width * scale;
 
-      // 水平偏移
-      let x = -offsetX % imgWidth;
-      if(x > 0) x -= imgWidth;
+  // 垂直置中
+  const y = (canvas.height - imgHeight) / 2;
 
-      // 垂直置中
-      const yOffset = (height - imgHeight)/2;
+  // 水平平移 + 無縫接圖
+  let x = offsetX % imgWidth;
+  if (x > 0) x -= imgWidth;
 
-      // 水平無縫繪製
-      for(let i = x; i < width; i += imgWidth){
-        ctx.drawImage(img, i, yOffset, imgWidth, imgHeight);
-      }
-    }
+  for (; x < canvas.width; x += imgWidth) {
+    ctx.drawImage(img, x, y, imgWidth, imgHeight);
+  }
+}
 
-    // -----------------------------
-    // 滑鼠拖曳
-    // -----------------------------
-    canvas.addEventListener('mousedown', e => {
-      isDragging = true;
-      startX = e.clientX;
-    });
-    canvas.addEventListener('mousemove', e => {
-      if(!isDragging) return;
-      const dx = e.clientX - startX;
-      startX = e.clientX;
-      offsetX -= dx;
-      draw();
-    });
-    canvas.addEventListener('mouseup', () => isDragging=false);
-    canvas.addEventListener('mouseleave', () => isDragging=false);
+// 滑鼠拖動
+canvas.addEventListener('mousedown', e => {
+  isDragging = true;
+  startX = e.clientX - offsetX;
+});
 
-    // -----------------------------
-    // 滾輪縮放（以游標為中心）
-    // -----------------------------
-    canvas.addEventListener('wheel', e => {
-      e.preventDefault();
-      const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const oldScale = scale;
+canvas.addEventListener('mousemove', e => {
+  if (isDragging) {
+    offsetX = e.clientX - startX;
+    draw();
+  }
+});
 
-      scale -= e.deltaY * 0.0015; // 調整縮放速度
-      if(scale < 0.5) scale = 0.5;
-      if(scale > 3) scale = 3;
+canvas.addEventListener('mouseup', () => isDragging = false);
+canvas.addEventListener('mouseleave', () => isDragging = false);
 
-      offsetX = (offsetX + mx)/oldScale*scale - mx;
-      draw();
-    });
+// 滑鼠滾輪縮放
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const zoomIntensity = 0.1;
+  const mouseX = e.clientX;
+  const prevScale = scale;
+  scale *= e.deltaY < 0 ? (1 + zoomIntensity) : (1 - zoomIntensity);
+  scale = Math.max(0.5, Math.min(scale, 5));
 
-    // -----------------------------
-    // 雙擊縮放（以游標為中心）
-    // -----------------------------
-    canvas.addEventListener('dblclick', e => {
-      const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const oldScale = scale;
+  const zoomRatio = scale / prevScale;
+  offsetX = mouseX - (mouseX - offsetX) * zoomRatio;
 
-      scale = (scale === 1) ? 2 : 1;
-      offsetX = (offsetX + mx)/oldScale*scale - mx;
-      draw();
-    });
+  draw();
+});
 
-    // -----------------------------
-    // 手機觸控滑動與捏合
-    // -----------------------------
-    canvas.addEventListener('touchstart', e => {
-      if(e.touches.length === 1){
-        touchStartX = e.touches[0].clientX;
-        lastTouchTime = Date.now();
-      } else if(e.touches.length === 2){
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        initialDistance = Math.sqrt(dx*dx + dy*dy);
-        initialScale = scale;
-      }
-    });
+// 手機觸控
+canvas.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) {
+    isDragging = true;
+    startX = e.touches[0].clientX - offsetX;
+  } else if (e.touches.length === 2) {
+    isDragging = false;
+    lastTouchDist = getDistance(e.touches[0], e.touches[1]);
+    lastCenter = getCenter(e.touches[0], e.touches[1]);
+  }
+});
 
-    canvas.addEventListener('touchmove', e => {
-      e.preventDefault();
-      if(e.touches.length === 1){
-        const now = Date.now();
-        if(now - lastTouchTime < 16) return; // 防抖
-        lastTouchTime = now;
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
 
-        const dx = e.touches[0].clientX - touchStartX;
-        touchStartX = e.touches[0].clientX;
-        offsetX -= dx;
-        draw();
-      } else if(e.touches.length === 2){
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        const distance = Math.sqrt(dx*dx + dy*dy);
+  if (e.touches.length === 1 && isDragging) {
+    offsetX = e.touches[0].clientX - startX;
+    draw();
+  } else if (e.touches.length === 2) {
+    const newDist = getDistance(e.touches[0], e.touches[1]);
+    const center = getCenter(e.touches[0], e.touches[1]);
 
-        scale = initialScale * (distance / initialDistance);
-        if(scale < 0.5) scale = 0.5;
-        if(scale > 3) scale = 3;
+    const prevScale = scale;
+    scale *= newDist / lastTouchDist;
+    scale = Math.max(0.5, Math.min(scale, 5));
 
-        draw();
-      }
-    });
+    const zoomRatio = scale / prevScale;
+    offsetX = center.x - (center.x - offsetX) * zoomRatio;
 
-    canvas.addEventListener('touchend', e => {
-      if(e.touches.length < 2) {
-        initialDistance = 0;
-        initialScale = scale;
-      }
-    });
+    lastTouchDist = newDist;
+    lastCenter = center;
+    draw();
+  }
+});
 
-    // -----------------------------
-    // 視窗大小調整
-    // -----------------------------
-    window.addEventListener('resize', () => {
-      width = canvas.width = window.innerWidth;
-      height = canvas.height = window.innerHeight;
-      draw();
-    });
-  </script>
+canvas.addEventListener('touchend', e => {
+  if (e.touches.length < 2) {
+    lastTouchDist = 0;
+    lastCenter = null;
+  }
+  isDragging = false;
+});
+
+function getDistance(t1, t2) {
+  return Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+}
+
+function getCenter(t1, t2) {
+  return {
+    x: (t1.clientX + t2.clientX) / 2,
+    y: (t1.clientY + t2.clientY) / 2
+  };
+}
+</script>
 </body>
 </html>
