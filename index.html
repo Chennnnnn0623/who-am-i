@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>左右循環全景 + 放大縮小</title>
+  <style>
+    body, html {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+    }
+    #panorama {
+      width: 100%;
+      height: 100%;
+      background-image: url('images/pano.jpg');
+      background-repeat: repeat-x;   /* 無縫循環 */
+      background-position: 0 center;
+      background-size: auto 100%;    /* 初始高度 100% */
+      cursor: grab;
+    }
+  </style>
+</head>
+<body>
+  <div id="panorama"></div>
+
+  <script>
+    const pano = document.getElementById('panorama');
+    let isDragging = false;
+    let startX = 0;
+    let bgPosX = 0;
+    let zoom = 100;  // 高度百分比
+
+    // 拖曳滑動
+    pano.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      startX = e.clientX;
+      pano.style.cursor = 'grabbing';
+    });
+    pano.addEventListener('mouseup', () => {
+      isDragging = false;
+      pano.style.cursor = 'grab';
+    });
+    pano.addEventListener('mouseleave', () => {
+      isDragging = false;
+      pano.style.cursor = 'grab';
+    });
+    pano.addEventListener('mousemove', (e) => {
+      if(!isDragging) return;
+      const deltaX = e.clientX - startX;
+      startX = e.clientX;
+      bgPosX += deltaX;
+      pano.style.backgroundPosition = `${bgPosX}px center`;
+    });
+
+    // 手機觸控滑動
+    let touchStartX = 0;
+    pano.addEventListener('touchstart', (e) => {
+      touchStartX = e.touches[0].clientX;
+    });
+    pano.addEventListener('touchmove', (e) => {
+      const deltaX = e.touches[0].clientX - touchStartX;
+      touchStartX = e.touches[0].clientX;
+      bgPosX += deltaX;
+      pano.style.backgroundPosition = `${bgPosX}px center`;
+    });
+
+    // 滾輪縮放
+    pano.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      zoom -= e.deltaY * 0.05;  // 調整縮放速度
+      if(zoom < 50) zoom = 50;  // 最小 50%
+      if(zoom > 200) zoom = 200; // 最大 200%
+      pano.style.backgroundSize = `auto ${zoom}%`;
+    });
+
+    // 手機觸控捏合縮放（簡單版）
+    let initialDistance = 0;
+    let initialZoom = zoom;
+    pano.addEventListener('touchstart', (e) => {
+      if(e.touches.length === 2){
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        initialDistance = Math.sqrt(dx*dx + dy*dy);
+        initialZoom = zoom;
+      }
+    });
+    pano.addEventListener('touchmove', (e) => {
+      if(e.touches.length === 2){
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const distance = Math.sqrt(dx*dx + dy*dy);
+        zoom = initialZoom * (distance / initialDistance);
+        if(zoom < 50) zoom = 50;
+        if(zoom > 200) zoom = 200;
+        pano.style.backgroundSize = `auto ${zoom}%`;
+      }
+    });
+
+  </script>
+</body>
+</html>
